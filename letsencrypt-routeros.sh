@@ -18,11 +18,13 @@ if [[ -z $ROUTEROS_USER ]] || [[ -z $ROUTEROS_HOST ]] || [[ -z $ROUTEROS_SSH_POR
         exit 1
 fi
 
-CERTIFICATE=/etc/letsencrypt/live/$DOMAIN/cert.pem
+CERTIFICATE=/etc/letsencrypt/live/$DOMAIN/fullchain.pem
 KEY=/etc/letsencrypt/live/$DOMAIN/privkey.pem
 
+SSH_OPTIONS="-o PubkeyAcceptedKeyTypes=+ssh-rsa"
+
 #Create alias for RouterOS command
-routeros="ssh -i $ROUTEROS_PRIVATE_KEY $ROUTEROS_USER@$ROUTEROS_HOST -p $ROUTEROS_SSH_PORT"
+routeros="ssh ${SSH_OPTIONS} -i $ROUTEROS_PRIVATE_KEY $ROUTEROS_USER@$ROUTEROS_HOST -p $ROUTEROS_SSH_PORT"
 
 #Check connection to RouterOS
 $routeros /system resource print
@@ -55,7 +57,7 @@ $routeros /certificate remove [find name=$DOMAIN.pem_0]
 # Delete Certificate file if the file exist on RouterOS
 $routeros /file remove $DOMAIN.pem > /dev/null
 # Upload Certificate to RouterOS
-scp -q -P $ROUTEROS_SSH_PORT -i "$ROUTEROS_PRIVATE_KEY" "$CERTIFICATE" "$ROUTEROS_USER"@"$ROUTEROS_HOST":"$DOMAIN.pem"
+scp ${SSH_OPTIONS} -q -P $ROUTEROS_SSH_PORT -i "$ROUTEROS_PRIVATE_KEY" "$CERTIFICATE" "$ROUTEROS_USER"@"$ROUTEROS_HOST":"$DOMAIN.pem"
 sleep 2
 # Import Certificate file
 $routeros /certificate import file-name=$DOMAIN.pem passphrase=\"\"
@@ -64,9 +66,9 @@ $routeros /file remove $DOMAIN.pem
 
 # Create Key
 # Delete Certificate file if the file exist on RouterOS
-$routeros /file remove $KEY.key > /dev/null
+$routeros /file remove $DOMAIN.key > /dev/null
 # Upload Key to RouterOS
-scp -q -P $ROUTEROS_SSH_PORT -i "$ROUTEROS_PRIVATE_KEY" "$KEY" "$ROUTEROS_USER"@"$ROUTEROS_HOST":"$DOMAIN.key"
+scp ${SSH_OPTIONS} -q -P $ROUTEROS_SSH_PORT -i "$ROUTEROS_PRIVATE_KEY" "$KEY" "$ROUTEROS_USER"@"$ROUTEROS_HOST":"$DOMAIN.key"
 sleep 2
 # Import Key file
 $routeros /certificate import file-name=$DOMAIN.key passphrase=\"\"
@@ -75,5 +77,9 @@ $routeros /file remove $DOMAIN.key
 
 # Setup Certificate to SSTP Server
 $routeros /interface sstp-server server set certificate=$DOMAIN.pem_0
+
+# Setup Certificate for www-ssl service
+$routeros /ip service set certificate=$DOMAIN.pem_0 www-ssl
+$routeros /ip service set certificate=$DOMAIN.pem_0 api-ssl
 
 exit 0
